@@ -1,0 +1,3 @@
+platform_manifest_dir: /etc/k8s-manifests/platform
+platform_pg_tenants: "{{ tenants | selectattr('postgres', 'defined') | selectattr('postgres') | list }}"
+platform_bucket_tenants: "{{ tenants | selectattr('bucket', 'defined') | list }}"

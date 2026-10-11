@@ -8,3 +8,4 @@ deploy-kubeconfigs/
 docs/specs/
 docs/plans/
 .superpowers/
+build/

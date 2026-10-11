@@ -1,0 +1,37 @@
+- name: "Pull and app secrets for {{ tenant.name }}"
+  ansible.builtin.include_tasks: apply.yml
+  vars:
+    platform_manifest: "{{ tenant.name }}-access"
+    platform_template: tenant-access.yaml.j2
+    platform_secret: true
+
+- name: "Deploy account for {{ tenant.name }}"
+  ansible.builtin.include_tasks: apply.yml
+  vars:
+    platform_manifest: "{{ tenant.name }}-deployer"
+    platform_template: deployer.yaml.j2
+
+- name: "Read the deploy token for {{ tenant.name }}"
+  ansible.builtin.command:
+    argv: [k3s, kubectl, -n, "{{ tenant.name }}", get, secret, deployer-token, -o, "jsonpath={.data.token}"]
+  register: platform_deployer_token
+  changed_when: false
+  retries: 10
+  delay: 2
+  until: platform_deployer_token.stdout | length > 0
+  no_log: true
+
+- name: "Read the cluster CA for {{ tenant.name }}"
+  ansible.builtin.command:
+    argv: [k3s, kubectl, -n, "{{ tenant.name }}", get, secret, deployer-token, -o, "jsonpath={.data.ca\\.crt}"]
+  register: platform_deployer_ca
+  changed_when: false
+
+- name: "Write the deploy kubeconfig to this workstation for {{ tenant.name }}"
+  ansible.builtin.copy:
+    dest: "{{ playbook_dir }}/deploy-kubeconfigs/{{ tenant.name }}.yaml"
+    content: "{{ lookup('ansible.builtin.template', 'deployer-kubeconfig.yaml.j2') }}"
+    mode: "0600"
+  delegate_to: localhost
+  become: false
+  no_log: true

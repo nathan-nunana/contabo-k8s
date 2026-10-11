@@ -60,3 +60,16 @@
       failed_when: not http_redirect.location.startswith('https://')
       delegate_to: localhost
       become: false
+
+- name: Check platform tenants
+  hosts: all
+  become: true
+  vars:
+    platform_pg_tenants: "{{ tenants | selectattr('postgres', 'defined') | selectattr('postgres') | list }}"
+  tasks:
+    - name: Check each tenant
+      ansible.builtin.include_tasks: tests/verify-tenant.yml
+      loop: "{{ tenants }}"
+      loop_control:
+        loop_var: tenant
+        label: "{{ tenant.name }}"

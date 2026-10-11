@@ -1,0 +1,61 @@
+- name: Render platform templates for schema validation
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    out_dir: "{{ playbook_dir }}/../build/platform"
+    # Templates rendered once, and once per tenant. Later tasks extend these.
+    platform_shared_templates: [namespaces]
+    platform_tenant_templates: [tenant-access, deployer]
+    # Per-tenant templates that only apply when the tenant has that feature.
+    platform_template_needs:
+      tenant-postgres: postgres
+      tenant-storage: bucket
+      bucket-key: bucket
+  tasks:
+    - name: Load the real defaults
+      ansible.builtin.include_vars: ../group_vars/all/main.yml
+
+    - name: Replace cluster-specific values with sample data
+      ansible.builtin.set_fact:
+        ansible_host: 203.0.113.10
+        domain: example.com
+        cluster_issuer: letsencrypt-staging
+        tenants:
+          - { name: demo-staging, postgres: true, bucket: public-read }
+          - { name: demo-private, postgres: true, bucket: private }
+          - { name: demo-plain }
+        ghcr_username: demo
+        ghcr_token: demo-token
+        tenant_secrets: { demo-staging: { JWT_SECRET: x, MOOLRE_SANDBOX: true } }
+        platform_password: example-password
+        platform_role_secret: backup-credentials
+        platform_role_name: backup
+        platform_deployer_ca: { stdout: Q0E= }
+        platform_deployer_token: { stdout: dG9rZW4= }
+
+    - name: Load the role's derived variables
+      ansible.builtin.include_vars: ../roles/platform/vars/main.yml
+
+    - name: Create the output directory
+      ansible.builtin.file:
+        path: "{{ out_dir }}"
+        state: directory
+        mode: "0755"
+
+    - name: Render shared templates
+      ansible.builtin.template:
+        src: "../roles/platform/templates/{{ item }}.yaml.j2"
+        dest: "{{ out_dir }}/{{ item }}.yaml"
+        mode: "0644"
+      loop: "{{ platform_shared_templates }}"
+
+    - name: Render per-tenant templates
+      ansible.builtin.template:
+        src: "../roles/platform/templates/{{ item.1 }}.yaml.j2"
+        dest: "{{ out_dir }}/{{ item.0.name }}-{{ item.1 }}.yaml"
+        mode: "0644"
+      loop: "{{ tenants | product(platform_tenant_templates) | list }}"
+      when: item.1 not in platform_template_needs or item.0[platform_template_needs[item.1]] is defined
+      vars:
+        tenant: "{{ item.0 }}"

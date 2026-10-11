@@ -1,0 +1,20 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: databases
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: storage
+{% for t in tenants %}
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {{ t.name }}
+  labels:
+    platform/tenant: "true"
+    postgres-access: "{{ (t.postgres | default(false)) | string | lower }}"
+    storage-access: "{{ (t.bucket is defined) | string | lower }}"
+{% endfor %}

@@ -42,3 +42,26 @@ prometheus_retention: 7d
 prometheus_retention_size: 15GB
 prometheus_storage_size: 20Gi
 grafana_admin_password: "{{ vault_grafana_admin_password }}"
+
+# Shared platform: Postgres in `databases`, MinIO in `storage`, and the tenant
+# namespaces that use them. Declare tenants in overrides.yml. See docs/platform.md.
+tenants: []
+# tenants:
+#   - { name: myapp-staging, postgres: true, bucket: public-read }
+
+cnpg_chart_version: 0.29.1
+postgres_image: ghcr.io/cloudnative-pg/postgresql:16.14-standard-trixie
+postgres_storage_size: 20Gi
+pg_backup_schedule: "30 2 * * *"
+pg_backup_retention_days: 7
+pg_backup_storage_size: 20Gi
+minio_image: pgsty/minio:RELEASE.2026-08-04T00-00-00Z
+minio_storage_size: 50Gi
+assets_host: "assets.{{ domain }}"
+redis_image: redis:7.4.9-alpine
+
+# GHCR read-only token (classic PAT, scope read:packages) used to pull private
+# images, and per-tenant app secrets, both from the vault.
+ghcr_username: "{{ vault_ghcr_username | default('') }}"
+ghcr_token: "{{ vault_ghcr_token | default('') }}"
+tenant_secrets: "{{ vault_tenant_secrets | default({}) }}"

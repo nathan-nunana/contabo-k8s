@@ -1,0 +1,21 @@
+- name: "Deployer cannot read Secrets for {{ tenant.name }}"
+  ansible.builtin.command:
+    argv: [k3s, kubectl, auth, can-i, get, secrets, -n, "{{ tenant.name }}",
+           "--as=system:serviceaccount:{{ tenant.name }}:deployer"]
+  register: verify_can_read_secrets
+  changed_when: false
+  failed_when: verify_can_read_secrets.stdout != 'no'
+
+- name: "Deployer can deploy for {{ tenant.name }}"
+  ansible.builtin.command:
+    argv: [k3s, kubectl, auth, can-i, "{{ item.verb }}", "{{ item.resource }}", -n, "{{ tenant.name }}",
+           "--as=system:serviceaccount:{{ tenant.name }}:deployer"]
+  loop:
+    - { verb: create, resource: jobs.batch }
+    - { verb: patch, resource: deployments.apps }
+    - { verb: create, resource: middlewares.traefik.io }
+  loop_control:
+    label: "{{ item.verb }} {{ item.resource }}"
+  register: verify_can_deploy
+  changed_when: false
+  failed_when: verify_can_deploy.stdout != 'yes'

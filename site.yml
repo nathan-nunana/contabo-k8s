@@ -20,3 +20,12 @@
   roles:
     - role: addons
       tags: [addons]
+
+- name: Shared platform services and tenants
+  hosts: all
+  become: true
+  environment:
+    KUBECONFIG: /etc/rancher/k3s/k3s.yaml
+  roles:
+    - role: platform
+      tags: [platform]

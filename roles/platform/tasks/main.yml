@@ -1,0 +1,25 @@
+- name: Create the platform manifest directory
+  ansible.builtin.file:
+    path: "{{ platform_manifest_dir }}"
+    state: directory
+    mode: "0700"
+
+- name: Create the platform and tenant namespaces
+  ansible.builtin.include_tasks: apply.yml
+  vars:
+    platform_manifest: namespaces
+
+- name: Create the local deploy-kubeconfigs directory
+  ansible.builtin.file:
+    path: "{{ playbook_dir }}/deploy-kubeconfigs"
+    state: directory
+    mode: "0700"
+  delegate_to: localhost
+  become: false
+
+- name: Set up each tenant
+  ansible.builtin.include_tasks: tenant.yml
+  loop: "{{ tenants }}"
+  loop_control:
+    loop_var: tenant
+    label: "{{ tenant.name }}"

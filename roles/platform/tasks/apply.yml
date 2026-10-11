@@ -1,0 +1,11 @@
+- name: Render {{ platform_manifest }}
+  ansible.builtin.template:
+    src: "{{ platform_template | default(platform_manifest ~ '.yaml.j2') }}"
+    dest: "{{ platform_manifest_dir }}/{{ platform_manifest }}.yaml"
+    mode: "0600"
+  no_log: "{{ platform_secret | default(false) }}"
+
+- name: Apply {{ platform_manifest }}
+  ansible.builtin.command: k3s kubectl apply -f {{ platform_manifest_dir }}/{{ platform_manifest }}.yaml
+  register: platform_apply
+  changed_when: platform_apply.stdout_lines | reject('search', ' unchanged$') | list | length > 0

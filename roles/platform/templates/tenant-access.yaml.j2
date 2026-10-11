@@ -1,0 +1,24 @@
+{% if ghcr_token %}
+apiVersion: v1
+kind: Secret
+metadata:
+  name: ghcr-pull
+  namespace: {{ tenant.name }}
+type: kubernetes.io/dockerconfigjson
+stringData:
+  .dockerconfigjson: {{ {'auths': {'ghcr.io': {'auth': (ghcr_username ~ ':' ~ ghcr_token) | b64encode}}} | to_json | to_json }}
+---
+{% endif %}
+apiVersion: v1
+kind: Secret
+metadata:
+  name: app
+  namespace: {{ tenant.name }}
+type: Opaque
+# Every value as a string. Booleans become "true"/"false": apps compare these
+# literally (the API checks MOOLRE_SANDBOX == "true"), and YAML's `true` would
+# otherwise render as "True".
+stringData:
+{% for key, value in (tenant_secrets[tenant.name] | default({})).items() %}
+  {{ key }}: {{ ((value | string | lower) if value is boolean else (value | string)) | to_json }}
+{% endfor %}

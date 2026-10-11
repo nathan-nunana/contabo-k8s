@@ -3,3 +3,9 @@
 vault_grafana_admin_password: change-me
 vault_smtp_password: smtp-or-app-password
 vault_healthchecks_ping_url: https://hc-ping.com/your-check-uuid
+vault_ghcr_username: your-github-user
+vault_ghcr_token: ghp_read_packages_token
+# Written as Secret `app` in each tenant namespace, exposed to the app as env vars.
+vault_tenant_secrets:
+  myapp-staging:
+    JWT_SECRET: change-me
