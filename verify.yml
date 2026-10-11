@@ -16,10 +16,12 @@
       delay: 15
       until: unhealthy_pods.stdout | length == 0
 
+    # Through the API server's service proxy: the Prometheus image is distroless,
+    # so there is no wget or curl to exec inside it.
     - name: Read Prometheus scrape targets
       ansible.builtin.command: >
-        k3s kubectl -n monitoring exec statefulset/prometheus-kube-prometheus-stack-prometheus
-        -c prometheus -- wget -qO- http://localhost:9090/api/v1/targets?state=active
+        k3s kubectl get --raw
+        /api/v1/namespaces/monitoring/services/kube-prometheus-stack-prometheus:http-web/proxy/api/v1/targets?state=active
       register: prometheus_targets
       changed_when: false
 
