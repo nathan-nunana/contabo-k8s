@@ -17,4 +17,7 @@ spec:
       - http01:
           ingress:
             ingressClassName: traefik
+            # The default NodePort is reachable past UFW and tenant namespaces
+            # reject it; Traefik only needs a ClusterIP.
+            serviceType: ClusterIP
 {% endfor %}
