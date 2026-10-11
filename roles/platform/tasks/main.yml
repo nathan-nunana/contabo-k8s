@@ -31,3 +31,8 @@
   loop_control:
     loop_var: tenant
     label: "{{ tenant.name }}"
+
+- name: Nightly database dumps
+  ansible.builtin.include_tasks: apply.yml
+  vars:
+    platform_manifest: pg-backups

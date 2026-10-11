@@ -64,6 +64,7 @@
 - name: Check platform tenants
   hosts: all
   become: true
+  gather_facts: true
   vars:
     platform_pg_tenants: "{{ tenants | selectattr('postgres', 'defined') | selectattr('postgres') | list }}"
   tasks:
@@ -89,6 +90,32 @@
         that: "'no response' in verify_pod_logs.stdout"
         fail_msg: "Expected no response, got: {{ verify_pod_logs.stdout }}"
         quiet: true
+
+    - name: Run a database dump now
+      ansible.builtin.command: >-
+        k3s kubectl -n databases create job --from=cronjob/pg-dump
+        pg-dump-verify-{{ ansible_date_time.epoch }}
+      changed_when: true
+
+    - name: Wait for the dump job pg-dump-verify-{{ ansible_date_time.epoch }}
+      ansible.builtin.command: >-
+        k3s kubectl -n databases wait --for=condition=complete --timeout=5m
+        job/pg-dump-verify-{{ ansible_date_time.epoch }}
+      changed_when: false
+
+    - name: Read the dump job output pg-dump-verify-{{ ansible_date_time.epoch }}
+      ansible.builtin.command: k3s kubectl -n databases logs job/pg-dump-verify-{{ ansible_date_time.epoch }}
+      register: verify_dump_logs
+      changed_when: false
+
+    - name: Every tenant database was dumped
+      ansible.builtin.assert:
+        that: "('dumped ' ~ (item.name | replace('-', '_'))) in verify_dump_logs.stdout"
+        fail_msg: "{{ verify_dump_logs.stdout }}"
+        quiet: true
+      loop: "{{ platform_pg_tenants }}"
+      loop_control:
+        label: "{{ item.name }}"
 
     - name: Check each tenant
       ansible.builtin.include_tasks: tests/verify-tenant.yml

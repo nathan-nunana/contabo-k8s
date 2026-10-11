@@ -1,0 +1,72 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: pg-dumps
+  namespace: databases
+spec:
+  accessModes: [ReadWriteOnce]
+  storageClassName: local-path-retain
+  resources:
+    requests:
+      storage: {{ pg_backup_storage_size }}
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: pg-dump
+  namespace: databases
+spec:
+  schedule: "{{ pg_backup_schedule }}"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      template:
+        spec:
+          restartPolicy: Never
+          securityContext:
+            runAsUser: 26
+            runAsGroup: 26
+            fsGroup: 26
+          containers:
+            - name: pg-dump
+              image: {{ postgres_image }}
+              env:
+                - name: PGHOST
+                  value: postgres-rw
+                - name: PGUSER
+                  value: backup
+                - name: PGSSLMODE
+                  value: require
+                - name: PGPASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: backup-credentials
+                      key: password
+                - name: DATABASES
+                  value: "{{ platform_pg_tenants | map(attribute='name') | map('replace', '-', '_') | join(' ') }}"
+                - name: RETENTION_DAYS
+                  value: "{{ pg_backup_retention_days }}"
+              command: [/bin/bash, -ec]
+              args:
+                - |
+                  # New pods get network access a couple of seconds after start.
+                  for i in $(seq 1 30); do pg_isready -q && break; sleep 1; done
+                  stamp=$(date -u +%Y%m%dT%H%M%SZ)
+                  for db in $DATABASES; do
+                    mkdir -p "/backups/$db"
+                    pg_dump -Fc -d "$db" -f "/backups/$db/$stamp.dump.partial"
+                    mv "/backups/$db/$stamp.dump.partial" "/backups/$db/$stamp.dump"
+                    echo "dumped $db"
+                  done
+                  # Keep RETENTION_DAYS days of dumps.
+                  find /backups -name '*.dump' -mmin +$((RETENTION_DAYS * 1440)) -print -delete
+              volumeMounts:
+                - name: backups
+                  mountPath: /backups
+          volumes:
+            - name: backups
+              persistentVolumeClaim:
+                claimName: pg-dumps

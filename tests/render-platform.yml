@@ -5,7 +5,8 @@
   vars:
     out_dir: "{{ playbook_dir }}/../build/platform"
     # Templates rendered once, and once per tenant. Later tasks extend these.
-    platform_shared_templates: [namespaces, tenant-policy, postgres-role-secret, postgres, postgres-databases]
+    platform_shared_templates:
+      [namespaces, tenant-policy, postgres-role-secret, postgres, postgres-databases, pg-backups]
     platform_tenant_templates: [tenant-access, deployer, tenant-postgres]
     # Per-tenant templates that only apply when the tenant has that feature.
     platform_template_needs:
