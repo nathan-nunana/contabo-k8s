@@ -128,7 +128,8 @@ spec:
     kind: ClusterIssuer
     name: {{ cluster_issuer }}
 ---
-# Read-only public access: only GET and HEAD are routed. Anything else 404s.
+# Read-only public access to objects: only GET and HEAD, and never MinIO's own
+# /minio/ paths (metrics are unauthenticated for Prometheus). Anything else 404s.
 apiVersion: traefik.io/v1alpha1
 kind: IngressRoute
 metadata:
@@ -138,7 +139,7 @@ spec:
   entryPoints: [websecure]
   routes:
     - kind: Rule
-      match: Host(`{{ assets_host }}`) && (Method(`GET`) || Method(`HEAD`))
+      match: Host(`{{ assets_host }}`) && (Method(`GET`) || Method(`HEAD`)) && !PathPrefix(`/minio/`)
       services:
         - name: minio
           port: 9000

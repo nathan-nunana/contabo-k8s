@@ -108,13 +108,25 @@
       delegate_to: localhost
       become: false
 
+    - name: Fetch MinIO's metrics path through the assets host
+      ansible.builtin.command:
+        argv: [curl, -sk, -w, "\nstatus=%{http_code}", --resolve, "{{ assets_host }}:443:{{ ansible_host }}",
+               "https://{{ assets_host }}/minio/v2/metrics/cluster"]
+      register: verify_assets_metrics
+      changed_when: false
+      delegate_to: localhost
+      become: false
+
     - name: GET reaches MinIO and PUT is refused before it
       ansible.builtin.assert:
         that:
           - "'<Error><Code>' in verify_assets.results[0].stdout"
           - "'status=404' in verify_assets.results[1].stdout"
           - "'404 page not found' in verify_assets.results[1].stdout"
-        fail_msg: "GET: {{ verify_assets.results[0].stdout }} / PUT: {{ verify_assets.results[1].stdout }}"
+          - "'404 page not found' in verify_assets_metrics.stdout"
+        fail_msg: >-
+          GET: {{ verify_assets.results[0].stdout }} / PUT: {{ verify_assets.results[1].stdout }}
+          / metrics: {{ verify_assets_metrics.stdout[:200] }}
         quiet: true
 
     - name: Run a database dump now
