@@ -161,3 +161,41 @@
       loop_control:
         loop_var: tenant
         label: "{{ tenant.name }}"
+
+# password.yml: a missing secret gets a generated value, but any other read
+# failure must stop the run instead of replacing a password.
+- name: Check password read-back
+  hosts: all
+  become: true
+  tasks:
+    - name: Read a secret that doesn't exist
+      ansible.builtin.include_tasks: roles/platform/tasks/password.yml
+      vars:
+        platform_pw_namespace: default
+        platform_pw_secret: password-read-test-missing
+        platform_pw_key: password
+
+    - name: A missing secret gets a generated value
+      ansible.builtin.assert:
+        that: platform_password | length == 32
+        quiet: true
+
+    - name: Read while the cluster API is unreachable
+      environment:
+        KUBECONFIG: /nonexistent/kubeconfig
+      block:
+        - name: Read with a broken kubeconfig
+          ansible.builtin.include_tasks: roles/platform/tasks/password.yml
+          vars:
+            platform_pw_namespace: default
+            platform_pw_secret: anything
+            platform_pw_key: password
+
+        - name: The read should have failed
+          ansible.builtin.fail:
+            msg: password.yml carried on after a failed read; it would have replaced the password.
+      rescue:
+        - name: Confirm it stopped on the read
+          ansible.builtin.assert:
+            that: "'carried on after a failed read' not in ansible_failed_result.msg | default('')"
+            quiet: true
