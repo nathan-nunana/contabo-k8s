@@ -8,7 +8,8 @@
     platform_shared_templates:
       [namespaces, tenant-policy, postgres-role-secret, postgres, postgres-databases, pg-backups,
        minio-root, minio]
-    platform_tenant_templates: [tenant-access, deployer, tenant-postgres, bucket-key, tenant-storage, tenant-redis]
+    platform_tenant_templates:
+      [tenant-access, tenant-network, deployer, tenant-postgres, bucket-key, tenant-storage, tenant-redis]
     # Per-tenant templates that only apply when the tenant has that feature.
     platform_template_needs:
       tenant-postgres: postgres

@@ -170,3 +170,40 @@
   register: verify_redis
   changed_when: false
   failed_when: verify_redis.stdout != 'PONG'
+
+- name: "Try other tenants' Redis from {{ tenant.name }}"
+  ansible.builtin.include_tasks: check-pod.yml
+  vars:
+    verify_pod_namespace: "{{ tenant.name }}"
+    verify_pod_name: redis-cross-check
+    verify_others: "{{ tenants | map(attribute='name') | reject('equalto', tenant.name) | join(' ') }}"
+    verify_pod_spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 999
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: redis-cross-check
+          image: "{{ redis_image }}"
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: { drop: [ALL] }
+          command: [sh, -c]
+          args:
+            - |
+              # Wait past the first seconds, when new pods have no network yet.
+              sleep 5
+              for ns in {{ verify_others }}; do
+                # NOAUTH or PONG means the connection got through.
+                out=$(timeout 5 redis-cli -h "redis.$ns.svc" ping 2>&1)
+                case "$out" in
+                  *NOAUTH*|*PONG*) echo "cross=$ns:reachable" ;;
+                  *) echo "cross=$ns:blocked" ;;
+                esac
+              done
+
+- name: "Other tenants' Redis is unreachable from {{ tenant.name }}"
+  ansible.builtin.assert:
+    that: "':reachable' not in verify_pod_logs.stdout"
+    fail_msg: "{{ verify_pod_logs.stdout }}"
+    quiet: true

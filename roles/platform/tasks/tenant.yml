@@ -5,6 +5,12 @@
     platform_template: tenant-access.yaml.j2
     platform_secret: true
 
+- name: "Network isolation for {{ tenant.name }}"
+  ansible.builtin.include_tasks: apply.yml
+  vars:
+    platform_manifest: "{{ tenant.name }}-network"
+    platform_template: tenant-network.yaml.j2
+
 - name: "Deploy account for {{ tenant.name }}"
   ansible.builtin.include_tasks: apply.yml
   vars:

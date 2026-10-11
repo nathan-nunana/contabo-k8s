@@ -65,6 +65,8 @@ Enforced by the cluster, and checked by `verify.yml`:
   key can't write to another bucket.
 - Only namespaces labelled `postgres-access` / `storage-access` can reach
   Postgres / MinIO at all.
+- Pods in a tenant namespace accept connections only from the same namespace,
+  Traefik and Prometheus, so other tenants can't reach its Redis or apps.
 - Tenant namespaces enforce the `restricted` Pod Security profile: no
   privileged pods, host mounts, host networking or host ports. Pods must run as
   non-root with `seccompProfile: RuntimeDefault`, no privilege escalation and
