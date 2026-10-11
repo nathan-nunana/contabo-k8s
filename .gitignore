@@ -2,3 +2,9 @@ kubeconfig
 .vault-pass
 *.retry
 group_vars/all/vault.yml
+group_vars/all/overrides.yml
+host_vars/
+deploy-kubeconfigs/
+docs/specs/
+docs/plans/
+.superpowers/

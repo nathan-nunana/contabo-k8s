@@ -33,12 +33,17 @@ Outside this repo:
 
 ## Setup
 
-1. Set the VPS IP in `inventory/hosts.yml`.
-2. Edit `group_vars/all/main.yml`:
+1. Put the VPS IP in `host_vars/k8s.yml` as `ansible_host: <ip>`.
+2. Put your real values in `group_vars/all/overrides.yml`, which overrides
+   `main.yml`:
    - `domain` and `acme_email`
    - `admin_cidrs`: your public IP as `/32`, for `kubectl` access
    - `admin_ssh_pubkey` if your key isn't `id_ed25519`
    - `alert_email_to`, `smtp_smarthost` and `smtp_username`
+   - `tenants`, once you use the shared platform
+
+   Both files are gitignored, so the repo can stay public: `main.yml` and
+   `inventory/hosts.yml` keep placeholders.
 3. Create the secrets vault with the Grafana password, SMTP password and
    healthchecks.io ping URL:
 
