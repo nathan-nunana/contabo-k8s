@@ -1,0 +1,3 @@
+# Copy into an encrypted vault with:
+#   ansible-vault create group_vars/all/vault.yml
+vault_grafana_admin_password: change-me

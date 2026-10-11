@@ -1,0 +1,28 @@
+# Connection. `make bootstrap` overrides this with root for the first run.
+ansible_user: "{{ admin_user }}"
+
+# Admin access
+admin_user: deploy
+admin_ssh_pubkey: "{{ lookup('ansible.builtin.file', '~/.ssh/id_ed25519.pub') }}"
+admin_cidrs: # allowed to reach the Kubernetes API on 6443
+  - 198.51.100.7/32
+
+# DNS: point A records for these names at the VPS before deploying
+domain: example.com
+grafana_host: "grafana.{{ domain }}"
+
+# Let's Encrypt
+acme_email: admin@example.com
+cluster_issuer: letsencrypt-prod # use letsencrypt-staging while testing
+
+# Pinned versions
+k3s_version: v1.36.5+k3s1
+helm_version: v3.22.0
+cert_manager_chart_version: v1.21.2
+kube_prometheus_stack_chart_version: 92.3.0
+
+# Monitoring sizing
+prometheus_retention: 7d
+prometheus_retention_size: 15GB
+prometheus_storage_size: 20Gi
+grafana_admin_password: "{{ vault_grafana_admin_password }}"

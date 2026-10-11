@@ -1,0 +1,30 @@
+- name: Smoke-test the cluster
+  hosts: all
+  become: true
+  tasks:
+    - name: Node is Ready
+      ansible.builtin.command: k3s kubectl wait --for=condition=Ready node --all --timeout=60s
+      changed_when: false
+
+    - name: No pods are stuck or failing
+      ansible.builtin.command: >
+        k3s kubectl get pods -A -o name
+        --field-selector=status.phase!=Running,status.phase!=Succeeded
+      register: unhealthy_pods
+      changed_when: false
+      retries: 20
+      delay: 15
+      until: unhealthy_pods.stdout | length == 0
+
+    - name: Grafana certificate is issued
+      ansible.builtin.command: >
+        k3s kubectl -n monitoring wait certificate/grafana-tls
+        --for=condition=Ready --timeout=300s
+      changed_when: false
+
+    - name: Grafana answers over HTTPS
+      ansible.builtin.uri:
+        url: "https://{{ grafana_host }}/api/health"
+        validate_certs: "{{ cluster_issuer == 'letsencrypt-prod' }}"
+      delegate_to: localhost
+      become: false

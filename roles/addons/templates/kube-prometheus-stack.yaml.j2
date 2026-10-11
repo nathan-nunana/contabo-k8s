@@ -1,0 +1,59 @@
+# k3s runs these inside the k3s process, so there is nothing separate to scrape.
+# Leaving them enabled only produces TargetDown alerts.
+kubeControllerManager:
+  enabled: false
+kubeScheduler:
+  enabled: false
+kubeProxy:
+  enabled: false
+kubeEtcd:
+  enabled: false
+
+prometheus:
+  prometheusSpec:
+    retention: {{ prometheus_retention }}
+    retentionSize: {{ prometheus_retention_size }}
+    # Pick up ServiceMonitors and PodMonitors from any release, not just this one
+    serviceMonitorSelectorNilUsesHelmValues: false
+    podMonitorSelectorNilUsesHelmValues: false
+    resources:
+      requests:
+        cpu: 200m
+        memory: 512Mi
+      limits:
+        memory: 2Gi
+    storageSpec:
+      volumeClaimTemplate:
+        spec:
+          storageClassName: local-path-retain
+          accessModes: [ReadWriteOnce]
+          resources:
+            requests:
+              storage: {{ prometheus_storage_size }}
+
+alertmanager:
+  alertmanagerSpec:
+    resources:
+      requests:
+        cpu: 10m
+        memory: 32Mi
+      limits:
+        memory: 128Mi
+
+grafana:
+  adminPassword: {{ grafana_admin_password | to_json }}
+  persistence:
+    enabled: true
+    storageClassName: local-path-retain
+    size: 2Gi
+  ingress:
+    enabled: true
+    ingressClassName: traefik
+    annotations:
+      cert-manager.io/cluster-issuer: {{ cluster_issuer }}
+    hosts:
+      - {{ grafana_host }}
+    tls:
+      - secretName: grafana-tls
+        hosts:
+          - {{ grafana_host }}

@@ -1,0 +1,4 @@
+profile: production
+exclude_paths:
+  - .ansible/
+  - group_vars/all/vault.yml

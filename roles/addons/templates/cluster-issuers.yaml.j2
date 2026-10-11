@@ -1,0 +1,20 @@
+{% for issuer in [
+  {'name': 'letsencrypt-staging', 'server': 'https://acme-staging-v02.api.letsencrypt.org/directory'},
+  {'name': 'letsencrypt-prod', 'server': 'https://acme-v02.api.letsencrypt.org/directory'},
+] %}
+---
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: {{ issuer.name }}
+spec:
+  acme:
+    server: {{ issuer.server }}
+    email: {{ acme_email }}
+    privateKeySecretRef:
+      name: {{ issuer.name }}-account-key
+    solvers:
+      - http01:
+          ingress:
+            ingressClassName: traefik
+{% endfor %}

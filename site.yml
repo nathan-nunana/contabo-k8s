@@ -1,0 +1,22 @@
+- name: Harden the VPS
+  hosts: all
+  become: true
+  roles:
+    - role: hardening
+      tags: [hardening]
+
+- name: Install k3s
+  hosts: all
+  become: true
+  roles:
+    - role: k3s
+      tags: [k3s]
+
+- name: Install cluster add-ons
+  hosts: all
+  become: true
+  environment:
+    KUBECONFIG: /etc/rancher/k3s/k3s.yaml
+  roles:
+    - role: addons
+      tags: [addons]
