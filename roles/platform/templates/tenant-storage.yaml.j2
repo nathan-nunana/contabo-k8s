@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Secret
+metadata:
+  name: storage
+  namespace: {{ tenant.name }}
+type: Opaque
+stringData:
+  ENDPOINT: minio.storage.svc:9000
+  ACCESS_KEY: {{ tenant.name }}
+  SECRET_KEY: {{ platform_password }}
+  BUCKET: {{ tenant.name }}
+  USE_SSL: "false"
+{% if tenant.bucket == 'public-read' %}
+  PUBLIC_URL: https://{{ assets_host }}/{{ tenant.name }}
+{% endif %}

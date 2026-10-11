@@ -1,0 +1,58 @@
+- name: "Bucket secret key for {{ tenant.name }}"
+  ansible.builtin.include_tasks: password.yml
+  vars:
+    platform_pw_namespace: storage
+    platform_pw_secret: "bucket-{{ tenant.name }}"
+    platform_pw_key: secretKey
+
+- name: "Keep the secret key next to MinIO for {{ tenant.name }}"
+  ansible.builtin.include_tasks: apply.yml
+  vars:
+    platform_manifest: "bucket-key-{{ tenant.name }}"
+    platform_template: bucket-key.yaml.j2
+    platform_secret: true
+
+# Runs mc inside the MinIO pod. Credentials come from the pod's own env and
+# from positional args, never from the command string Ansible logs.
+- name: "Bucket, user and policy for {{ tenant.name }}"
+  ansible.builtin.command:
+    argv:
+      - k3s
+      - kubectl
+      - -n
+      - storage
+      - exec
+      - minio-0
+      - --
+      - sh
+      - -ec
+      - |
+        export MC_CONFIG_DIR=/tmp/.mc MC_HOST_local="http://$MINIO_ROOT_USER:$MINIO_ROOT_PASSWORD@localhost:9000"
+        bucket=$1 secret=$2 access=$3
+        mc mb --ignore-existing "local/$bucket"
+        statement='{"Effect":"Allow","Action":["s3:*"],"Resource":["arn:aws:s3:::%s","arn:aws:s3:::%s/*"]}'
+        printf '{"Version":"2012-10-17","Statement":['"$statement"']}' "$bucket" "$bucket" > "/tmp/policy-$bucket.json"
+        mc admin policy create local "bucket-$bucket" "/tmp/policy-$bucket.json"
+        mc admin user add local "$bucket" "$secret"
+        # attach fails when already attached; then confirm it is. The image has
+        # no grep, so match with case.
+        if ! mc admin policy attach local "bucket-$bucket" --user "$bucket" >/dev/null 2>&1; then
+          case "$(mc admin user info local "$bucket")" in
+            *"bucket-$bucket"*) ;;
+            *) echo "policy bucket-$bucket is not attached to $bucket" >&2; exit 1 ;;
+          esac
+        fi
+        mc anonymous set "$access" "local/$bucket"
+      - sh
+      - "{{ tenant.name }}"
+      - "{{ platform_password }}"
+      - "{{ 'download' if tenant.bucket == 'public-read' else 'none' }}"
+  changed_when: false
+  no_log: true
+
+- name: "Storage secret for {{ tenant.name }}"
+  ansible.builtin.include_tasks: apply.yml
+  vars:
+    platform_manifest: "{{ tenant.name }}-storage"
+    platform_template: tenant-storage.yaml.j2
+    platform_secret: true

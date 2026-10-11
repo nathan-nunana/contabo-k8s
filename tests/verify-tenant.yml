@@ -99,3 +99,66 @@
           - "':error' not in verify_pod_logs.stdout"
         fail_msg: "{{ verify_pod_logs.stdout }}"
         quiet: true
+
+- name: "Bucket access for {{ tenant.name }}"
+  when: tenant.bucket is defined
+  block:
+    - name: "Write own bucket and try the others for {{ tenant.name }}"
+      ansible.builtin.include_tasks: check-pod.yml
+      vars:
+        verify_pod_namespace: "{{ tenant.name }}"
+        verify_pod_name: s3-check
+        verify_others: "{{ tenants | selectattr('bucket', 'defined') | map(attribute='name')
+                           | reject('equalto', tenant.name) | join(' ') }}"
+        verify_pod_spec:
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+            seccompProfile: { type: RuntimeDefault }
+          containers:
+            - name: s3-check
+              image: "{{ minio_image }}"
+              envFrom: [{ secretRef: { name: storage } }]
+              securityContext:
+                allowPrivilegeEscalation: false
+                capabilities: { drop: [ALL] }
+              command: [/bin/sh, -c]
+              args:
+                - |
+                  export MC_CONFIG_DIR=/tmp/.mc MC_HOST_t="http://$ACCESS_KEY:$SECRET_KEY@$ENDPOINT"
+                  # New pods get network access a couple of seconds after start.
+                  for i in $(seq 1 30); do curl -sf "http://$ENDPOINT/minio/health/live" && break; sleep 1; done
+                  echo ok > /tmp/probe.txt
+                  if mc cp -q /tmp/probe.txt "t/$BUCKET/verify/probe.txt" >/dev/null
+                  then echo own=write-ok; else echo own=write-failed; fi
+                  for b in {{ verify_others }}; do
+                    # The image has no grep, so match with case.
+                    if out=$(mc cp -q /tmp/probe.txt "t/$b/verify/probe.txt" 2>&1); then
+                      echo "cross=$b:allowed"
+                    else
+                      case "$out" in
+                        *"Insufficient permissions"*|*"Access Denied"*) echo "cross=$b:denied" ;;
+                        *) echo "cross=$b:error: $out" ;;
+                      esac
+                    fi
+                  done
+
+    - name: "Only its own bucket is writable for {{ tenant.name }}"
+      ansible.builtin.assert:
+        that:
+          - "'own=write-ok' in verify_pod_logs.stdout"
+          - "':allowed' not in verify_pod_logs.stdout"
+          - "':error' not in verify_pod_logs.stdout"
+        fail_msg: "{{ verify_pod_logs.stdout }}"
+        quiet: true
+
+    - name: "Public files are readable on the assets host for {{ tenant.name }}"
+      when: tenant.bucket == 'public-read'
+      ansible.builtin.command:
+        argv: [curl, -sk, --resolve, "{{ assets_host }}:443:{{ ansible_host }}",
+               "https://{{ assets_host }}/{{ tenant.name }}/verify/probe.txt"]
+      register: verify_public
+      changed_when: false
+      failed_when: verify_public.stdout | trim != 'ok'
+      delegate_to: localhost
+      become: false

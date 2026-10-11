@@ -52,3 +52,7 @@
         platform_manifest: "{{ tenant.name }}-postgres"
         platform_template: tenant-postgres.yaml.j2
         platform_secret: true
+
+- name: "Bucket for {{ tenant.name }}"
+  ansible.builtin.include_tasks: bucket.yml
+  when: tenant.bucket is defined
