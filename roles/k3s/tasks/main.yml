@@ -41,6 +41,12 @@
   delay: 10
   until: k3s_node_ready.rc == 0
 
+- name: Redirect HTTP to HTTPS in the bundled Traefik
+  ansible.builtin.template:
+    src: traefik-config.yaml.j2
+    dest: /var/lib/rancher/k3s/server/manifests/traefik-config.yaml
+    mode: "0600"
+
 - name: Read the cluster kubeconfig
   ansible.builtin.slurp:
     src: /etc/rancher/k3s/k3s.yaml

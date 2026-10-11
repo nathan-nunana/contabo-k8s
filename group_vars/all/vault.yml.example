@@ -1,3 +1,5 @@
 # Copy into an encrypted vault with:
 #   ansible-vault create group_vars/all/vault.yml
 vault_grafana_admin_password: change-me
+vault_smtp_password: smtp-or-app-password
+vault_healthchecks_ping_url: https://hc-ping.com/your-check-uuid

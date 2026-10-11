@@ -4,3 +4,9 @@ node-name: {{ inventory_hostname }}
 tls-san:
   - {{ ansible_host }}
 secrets-encryption: true
+
+# Embedded etcd instead of SQLite, for scheduled snapshots.
+# Stored in /var/lib/rancher/k3s/server/db/snapshots.
+cluster-init: true
+etcd-snapshot-schedule-cron: "{{ etcd_snapshot_schedule }}"
+etcd-snapshot-retention: {{ etcd_snapshot_retention }}

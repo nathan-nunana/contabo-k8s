@@ -16,6 +16,7 @@ prometheus:
     # Pick up ServiceMonitors and PodMonitors from any release, not just this one
     serviceMonitorSelectorNilUsesHelmValues: false
     podMonitorSelectorNilUsesHelmValues: false
+    ruleSelectorNilUsesHelmValues: false
     resources:
       requests:
         cpu: 200m
@@ -32,6 +33,40 @@ prometheus:
               storage: {{ prometheus_storage_size }}
 
 alertmanager:
+  # Merged over the chart defaults, which keep their inhibit_rules and templates.
+  config:
+    global:
+      resolve_timeout: 5m
+      smtp_smarthost: {{ smtp_smarthost | to_json }}
+      smtp_from: {{ smtp_from | to_json }}
+      smtp_auth_username: {{ smtp_username | to_json }}
+      smtp_auth_password: {{ smtp_password | to_json }}
+      smtp_require_tls: true
+    route:
+      receiver: email
+      group_by: [alertname, namespace]
+      group_wait: 30s
+      group_interval: 5m
+      repeat_interval: 4h
+      routes:
+        # Always firing. healthchecks.io alerts you when these pings stop.
+        - receiver: heartbeat
+          matchers: ['alertname = "Watchdog"']
+          group_wait: 0s
+          group_interval: 1m
+          repeat_interval: 1m
+        - receiver: "null"
+          matchers: ['severity = "none"']
+    receivers:
+      - name: "null"
+      - name: email
+        email_configs:
+          - to: {{ alert_email_to | to_json }}
+            send_resolved: true
+      - name: heartbeat
+        webhook_configs:
+          - url: {{ healthchecks_ping_url | to_json }}
+            send_resolved: false
   alertmanagerSpec:
     resources:
       requests:
@@ -39,6 +74,75 @@ alertmanager:
         memory: 32Mi
       limits:
         memory: 128Mi
+    # Keeps silences and notification state across restarts
+    storage:
+      volumeClaimTemplate:
+        spec:
+          storageClassName: local-path-retain
+          accessModes: [ReadWriteOnce]
+          resources:
+            requests:
+              storage: 1Gi
+
+prometheus-node-exporter:
+  # The first two are the chart defaults; setting extraArgs replaces the list.
+  extraArgs:
+    - --collector.filesystem.mount-points-exclude=^/(dev|proc|sys|run/containerd/.+|var/lib/docker/.+|var/lib/kubelet/.+)($|/)
+    - --collector.filesystem.fs-types-exclude=^(autofs|binfmt_misc|bpf|cgroup2?|configfs|debugfs|devpts|devtmpfs|fusectl|hugetlbfs|iso9660|mqueue|nsfs|overlay|proc|procfs|pstore|rpc_pipefs|securityfs|selinuxfs|squashfs|sysfs|tracefs|erofs)$
+    - --collector.textfile.directory=/host/textfile
+  extraHostVolumeMounts:
+    - name: textfile
+      hostPath: {{ addons_textfile_dir }}
+      mountPath: /host/textfile
+      readOnly: true
+
+additionalPrometheusRulesMap:
+  custom:
+    groups:
+{% raw %}
+      - name: certificates
+        rules:
+          - alert: CertificateExpiringSoon
+            expr: certmanager_certificate_expiration_timestamp_seconds - time() < 14 * 24 * 3600
+            for: 1h
+            labels:
+              severity: warning
+            annotations:
+              summary: Certificate {{ $labels.exported_namespace }}/{{ $labels.name }} expires in under 14 days.
+              description: >-
+                cert-manager renews 30 days before expiry, so renewal is failing.
+                Run `kubectl describe certificate -n {{ $labels.exported_namespace }} {{ $labels.name }}`.
+          - alert: CertificateNotReady
+            expr: certmanager_certificate_ready_status{condition="False"} == 1
+            for: 15m
+            labels:
+              severity: warning
+            annotations:
+              summary: Certificate {{ $labels.exported_namespace }}/{{ $labels.name }} is not Ready.
+              description: Check the Certificate, its CertificateRequest and the ACME Challenge for errors.
+      - name: traefik
+        rules:
+          - alert: TraefikHighErrorRate
+            expr: |
+              sum by (service) (rate(traefik_service_requests_total{code=~"5.."}[5m]))
+                / sum by (service) (rate(traefik_service_requests_total[5m])) > 0.05
+            for: 10m
+            labels:
+              severity: warning
+            annotations:
+              summary: Traefik service {{ $labels.service }} is returning {{ $value | humanizePercentage }} 5xx responses.
+              description: More than 5% of requests to this service have failed for 10 minutes.
+      - name: host
+        rules:
+          - alert: NodeRebootRequired
+            expr: node_reboot_required == 1
+            for: 24h
+            labels:
+              severity: warning
+            annotations:
+              summary: "{{ $labels.instance }} has needed a reboot for over a day."
+              description: Updates installed by unattended-upgrades only take effect after a reboot.
+{% endraw %}
 
 grafana:
   adminPassword: {{ grafana_admin_password | to_json }}
@@ -57,3 +161,30 @@ grafana:
       - secretName: grafana-tls
         hosts:
           - {{ grafana_host }}
+  # Extra dashboards from grafana.com, alongside the ones the chart ships
+  dashboardProviders:
+    dashboardproviders.yaml:
+      apiVersion: 1
+      providers:
+        - name: grafana-com
+          orgId: 1
+          folder: Server
+          type: file
+          disableDeletion: true
+          editable: false
+          options:
+            path: /var/lib/grafana/dashboards/grafana-com
+  dashboards:
+    grafana-com:
+      node-exporter-full:
+        gnetId: 1860
+        revision: 45
+      traefik:
+        gnetId: 17347
+        revision: 9
+        datasource:
+          - name: DS_PROMETHEUS
+            value: prometheus
+      cert-manager:
+        gnetId: 11001
+        revision: 1

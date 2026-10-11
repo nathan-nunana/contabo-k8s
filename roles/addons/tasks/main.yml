@@ -5,16 +5,48 @@
   failed_when: false
 
 - name: Install Helm
-  ansible.builtin.unarchive:
-    src: "https://get.helm.sh/helm-{{ helm_version }}-linux-{{ helm_arch }}.tar.gz"
-    dest: /usr/local/bin
-    remote_src: true
-    include: ["linux-{{ helm_arch }}/helm"]
-    extra_opts: [--strip-components=1]
-    mode: "0755"
-  vars:
-    helm_arch: "{{ {'x86_64': 'amd64', 'aarch64': 'arm64'}[ansible_facts['architecture']] }}"
   when: addons_helm_installed.rc != 0 or helm_version not in addons_helm_installed.stdout
+  block:
+    - name: Download Helm and verify its checksum
+      ansible.builtin.get_url:
+        url: "{{ addons_helm_url }}"
+        dest: /tmp/helm.tar.gz
+        checksum: "sha256:{{ addons_helm_url }}.sha256sum"
+        mode: "0644"
+
+    - name: Unpack the Helm binary
+      ansible.builtin.unarchive:
+        src: /tmp/helm.tar.gz
+        dest: /usr/local/bin
+        remote_src: true
+        include: ["linux-{{ addons_helm_arch }}/helm"]
+        extra_opts: [--strip-components=1]
+        mode: "0755"
+
+- name: Create the textfile collector directory
+  ansible.builtin.file:
+    path: "{{ addons_textfile_dir }}"
+    state: directory
+    mode: "0755"
+
+- name: Install the reboot-required metric script
+  ansible.builtin.copy:
+    src: reboot-required-metric.sh
+    dest: /usr/local/bin/reboot-required-metric
+    mode: "0755"
+
+- name: Export the reboot-required metric every 5 minutes
+  ansible.builtin.cron:
+    name: reboot-required metric
+    cron_file: reboot-required-metric
+    user: root
+    minute: "*/5"
+    job: /usr/local/bin/reboot-required-metric
+
+- name: Write the reboot-required metric now
+  ansible.builtin.command: /usr/local/bin/reboot-required-metric
+  args:
+    creates: "{{ addons_textfile_dir }}/reboot_required.prom"
 
 - name: Create the manifest directory
   ansible.builtin.file:
@@ -68,4 +100,16 @@
     wait: true
     wait_timeout: 10m
     release_values: "{{ lookup('ansible.builtin.template', 'kube-prometheus-stack.yaml.j2') | from_yaml }}"
-  no_log: true # values include the Grafana admin password
+  no_log: true # values include the Grafana, SMTP and heartbeat secrets
+
+# Needs the ServiceMonitor and PodMonitor CRDs from kube-prometheus-stack
+- name: Render the Traefik and cert-manager monitors
+  ansible.builtin.template:
+    src: monitors.yaml.j2
+    dest: /etc/k8s-manifests/monitors.yaml
+    mode: "0600"
+
+- name: Apply the Traefik and cert-manager monitors
+  ansible.builtin.command: k3s kubectl apply -f /etc/k8s-manifests/monitors.yaml
+  register: addons_monitors_apply
+  changed_when: "'unchanged' not in addons_monitors_apply.stdout"

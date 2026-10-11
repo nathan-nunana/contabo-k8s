@@ -13,13 +13,29 @@ grafana_host: "grafana.{{ domain }}"
 
 # Let's Encrypt
 acme_email: admin@example.com
-cluster_issuer: letsencrypt-prod # use letsencrypt-staging while testing
+cluster_issuer: letsencrypt-prod
 
 # Pinned versions
 k3s_version: v1.36.5+k3s1
 helm_version: v3.22.0
 cert_manager_chart_version: v1.21.2
 kube_prometheus_stack_chart_version: 92.3.0
+
+# Alert email. With Gmail, smtp_from must be the account address and the
+# password an app password: https://myaccount.google.com/apppasswords
+alert_email_to: admin@example.com
+smtp_smarthost: smtp.gmail.com:587
+smtp_username: alerts@example.com
+smtp_from: "{{ smtp_username }}"
+smtp_password: "{{ vault_smtp_password }}"
+
+# Ping URL of a healthchecks.io check (period 5 min, grace 5 min). The check
+# alerts you when the VPS or Prometheus stops sending the Watchdog alert.
+healthchecks_ping_url: "{{ vault_healthchecks_ping_url }}"
+
+# etcd snapshots, kept on the VPS: every 6 hours, 7 days' worth
+etcd_snapshot_schedule: "0 */6 * * *"
+etcd_snapshot_retention: 28
 
 # Monitoring sizing
 prometheus_retention: 7d

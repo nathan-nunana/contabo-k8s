@@ -16,6 +16,26 @@
       delay: 15
       until: unhealthy_pods.stdout | length == 0
 
+    - name: Read Prometheus scrape targets
+      ansible.builtin.command: >
+        k3s kubectl -n monitoring exec statefulset/prometheus-kube-prometheus-stack-prometheus
+        -c prometheus -- wget -qO- http://localhost:9090/api/v1/targets?state=active
+      register: prometheus_targets
+      changed_when: false
+
+    - name: Every scrape target is up, including Traefik and cert-manager
+      vars:
+        targets: "{{ (prometheus_targets.stdout | from_json).data.activeTargets }}"
+        jobs: "{{ targets | map(attribute='labels.job') | unique }}"
+        down: "{{ targets | rejectattr('health', 'equalto', 'up') | map(attribute='scrapeUrl') | list }}"
+      ansible.builtin.assert:
+        that:
+          - down | length == 0
+          - "'cert-manager' in jobs"
+          - jobs | select('search', 'traefik') | list | length > 0
+        fail_msg: "Down: {{ down }}. Jobs found: {{ jobs }}"
+        quiet: true
+
     - name: Grafana certificate is issued
       ansible.builtin.command: >
         k3s kubectl -n monitoring wait certificate/grafana-tls
@@ -26,5 +46,15 @@
       ansible.builtin.uri:
         url: "https://{{ grafana_host }}/api/health"
         validate_certs: "{{ cluster_issuer == 'letsencrypt-prod' }}"
+      delegate_to: localhost
+      become: false
+
+    - name: Plain HTTP redirects to HTTPS
+      ansible.builtin.uri:
+        url: "http://{{ grafana_host }}/"
+        follow_redirects: none
+        status_code: [301, 308]
+      register: http_redirect
+      failed_when: not http_redirect.location.startswith('https://')
       delegate_to: localhost
       become: false
