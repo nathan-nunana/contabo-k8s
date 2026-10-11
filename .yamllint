@@ -14,3 +14,7 @@ rules:
   octal-values:
     forbid-implicit-octal: true
     forbid-explicit-octal: true
+
+ignore: |
+  build/
+  deploy-kubeconfigs/
