@@ -163,6 +163,18 @@
       delegate_to: localhost
       become: false
 
+    # Public means "fetch a file by its key", not "list every key".
+    - name: "Public buckets can't be listed for {{ tenant.name }}"
+      when: tenant.bucket == 'public-read'
+      ansible.builtin.command:
+        argv: [curl, -sk, --resolve, "{{ assets_host }}:443:{{ ansible_host }}",
+               "https://{{ assets_host }}/{{ tenant.name }}/"]
+      register: verify_listing
+      changed_when: false
+      failed_when: "'ListBucketResult' in verify_listing.stdout or 'AccessDenied' not in verify_listing.stdout"
+      delegate_to: localhost
+      become: false
+
 - name: "Redis answers with the tenant's password for {{ tenant.name }}"
   ansible.builtin.command:
     argv: [k3s, kubectl, -n, "{{ tenant.name }}", exec, redis-0, --, sh, -c,

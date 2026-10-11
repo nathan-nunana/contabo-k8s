@@ -45,10 +45,18 @@
             *) echo "policy bucket-$bucket is not attached to $bucket" >&2; exit 1 ;;
           esac
         fi
-        mc anonymous set "$access" "local/$bucket"
+        # Public buckets allow anonymous GetObject only. mc's `download` preset
+        # would also allow listing every key.
+        if [ "$access" = public-read ]; then
+          anonymous='{"Effect":"Allow","Principal":{"AWS":["*"]},"Action":["s3:GetObject"],"Resource":["arn:aws:s3:::%s/*"]}'
+          printf '{"Version":"2012-10-17","Statement":['"$anonymous"']}' "$bucket" > "/tmp/anonymous-$bucket.json"
+          mc anonymous set-json "/tmp/anonymous-$bucket.json" "local/$bucket"
+        else
+          mc anonymous set none "local/$bucket"
+        fi
       - sh
       - "{{ tenant.name }}"
-      - "{{ 'download' if tenant.bucket == 'public-read' else 'none' }}"
+      - "{{ tenant.bucket }}"
     stdin: "{{ platform_password }}"
   changed_when: false
   no_log: true
