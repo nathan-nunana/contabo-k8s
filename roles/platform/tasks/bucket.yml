@@ -12,8 +12,9 @@
     platform_template: bucket-key.yaml.j2
     platform_secret: true
 
-# Runs mc inside the MinIO pod. Credentials come from the pod's own env and
-# from positional args, never from the command string Ansible logs.
+# Runs mc inside the MinIO pod. The root credentials come from the pod's env
+# and the tenant's secret key from stdin: arguments are readable from /proc by
+# anyone on the host while the command runs.
 - name: "Bucket, user and policy for {{ tenant.name }}"
   ansible.builtin.command:
     argv:
@@ -22,13 +23,15 @@
       - -n
       - storage
       - exec
+      - -i
       - minio-0
       - --
       - sh
       - -ec
       - |
         export MC_CONFIG_DIR=/tmp/.mc MC_HOST_local="http://$MINIO_ROOT_USER:$MINIO_ROOT_PASSWORD@localhost:9000"
-        bucket=$1 secret=$2 access=$3
+        bucket=$1 access=$2
+        read -r secret
         mc mb --ignore-existing "local/$bucket"
         statement='{"Effect":"Allow","Action":["s3:*"],"Resource":["arn:aws:s3:::%s","arn:aws:s3:::%s/*"]}'
         printf '{"Version":"2012-10-17","Statement":['"$statement"']}' "$bucket" "$bucket" > "/tmp/policy-$bucket.json"
@@ -45,8 +48,8 @@
         mc anonymous set "$access" "local/$bucket"
       - sh
       - "{{ tenant.name }}"
-      - "{{ platform_password }}"
       - "{{ 'download' if tenant.bucket == 'public-read' else 'none' }}"
+    stdin: "{{ platform_password }}"
   changed_when: false
   no_log: true
 

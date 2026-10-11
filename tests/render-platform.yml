@@ -68,3 +68,17 @@
           - "'ghcr-pull' in lookup('ansible.builtin.file', out_dir ~ '/demo-staging-tenant-access.yaml')"
           - "'ghcr-pull' not in lookup('ansible.builtin.file', out_dir ~ '/demo-plain-tenant-access.yaml')"
         quiet: true
+
+    # Secrets on a command line are readable from /proc by anyone on the host
+    # while the command runs; pass them on stdin instead.
+    - name: No generated secret is passed as a command argument
+      ansible.builtin.assert:
+        that: >-
+          lookup('ansible.builtin.file', item)
+          | regex_findall('argv:[\\s\\S]*?(?=\\n {0,4}[a-z_]+:|\\n- name:|$)')
+          | select('search', 'platform_password') | list | length == 0
+        fail_msg: "{{ item | basename }} passes platform_password in argv; send it on stdin."
+        quiet: true
+      loop: "{{ query('ansible.builtin.fileglob', playbook_dir ~ '/../roles/platform/tasks/*.yml') }}"
+      loop_control:
+        label: "{{ item | basename }}"
