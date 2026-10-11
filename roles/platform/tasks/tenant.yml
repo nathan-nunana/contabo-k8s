@@ -56,3 +56,21 @@
 - name: "Bucket for {{ tenant.name }}"
   ansible.builtin.include_tasks: bucket.yml
   when: tenant.bucket is defined
+
+- name: "Redis password for {{ tenant.name }}"
+  ansible.builtin.include_tasks: password.yml
+  vars:
+    platform_pw_namespace: "{{ tenant.name }}"
+    platform_pw_secret: redis-auth
+    platform_pw_key: REDIS_PASSWORD
+
+- name: "Redis for {{ tenant.name }}"
+  ansible.builtin.include_tasks: apply.yml
+  vars:
+    platform_manifest: "{{ tenant.name }}-redis"
+    platform_template: tenant-redis.yaml.j2
+    platform_secret: true
+
+- name: "Wait for Redis for {{ tenant.name }}"
+  ansible.builtin.command: k3s kubectl -n {{ tenant.name }} rollout status statefulset/redis --timeout=3m
+  changed_when: false

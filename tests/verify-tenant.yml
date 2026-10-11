@@ -162,3 +162,11 @@
       failed_when: verify_public.stdout | trim != 'ok'
       delegate_to: localhost
       become: false
+
+- name: "Redis answers with the tenant's password for {{ tenant.name }}"
+  ansible.builtin.command:
+    argv: [k3s, kubectl, -n, "{{ tenant.name }}", exec, redis-0, --, sh, -c,
+           'redis-cli -a "$REDIS_PASSWORD" --no-auth-warning ping']
+  register: verify_redis
+  changed_when: false
+  failed_when: verify_redis.stdout != 'PONG'
