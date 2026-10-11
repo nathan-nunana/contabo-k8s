@@ -8,7 +8,7 @@
 # `kubectl apply` says "configured" for every Secret written with stringData,
 # even when nothing changes, so compare with `kubectl diff` first: exit 0 means
 # the cluster already matches, 1 means it differs.
-- name: Compare {{ platform_manifest }} with the cluster
+- name: Compare with the cluster {{ platform_manifest }}
   ansible.builtin.command: k3s kubectl diff -f {{ platform_manifest_dir }}/{{ platform_manifest }}.yaml
   register: platform_diff
   changed_when: platform_diff.rc == 1
