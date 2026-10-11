@@ -1,0 +1,74 @@
+# Admission rules for tenant namespaces (label platform/tenant=true). They hold
+# for every client, including CI's deploy account.
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: tenant-services
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+      - apiGroups: [""]
+        apiVersions: [v1]
+        operations: [CREATE, UPDATE]
+        resources: [services]
+  validations:
+    # NodePort and LoadBalancer bind host ports that bypass UFW; externalIPs
+    # can capture traffic for other addresses.
+    - expression: "!has(object.spec.type) || object.spec.type == 'ClusterIP'"
+      message: Tenant Services must be ClusterIP; expose apps through an Ingress.
+    - expression: "!has(object.spec.externalIPs) || size(object.spec.externalIPs) == 0"
+      message: Tenant Services must not set externalIPs.
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: tenant-services
+spec:
+  policyName: tenant-services
+  validationActions: [Deny]
+  matchResources:
+    namespaceSelector:
+      matchLabels:
+        platform/tenant: "true"
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: tenant-ingress-hosts
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+      - apiGroups: [networking.k8s.io]
+        apiVersions: [v1]
+        operations: [CREATE, UPDATE]
+        resources: [ingresses]
+  variables:
+    - name: allowed
+      expression: >-
+        has(namespaceObject.metadata.annotations)
+        && 'platform/allowed-hosts' in namespaceObject.metadata.annotations
+        && namespaceObject.metadata.annotations['platform/allowed-hosts'] != ''
+        ? namespaceObject.metadata.annotations['platform/allowed-hosts'].split(',') : []
+  validations:
+    # A tenant may only route its own hostnames, so it can't take over another
+    # tenant's or the platform's (Grafana, assets) traffic or certificates.
+    - expression: "!has(object.spec.defaultBackend)"
+      message: defaultBackend is not allowed in this namespace; name the hosts instead.
+    - expression: "has(object.spec.rules) && object.spec.rules.all(r, has(r.host) && r.host in variables.allowed)"
+      messageExpression: "'Ingress host is not allowed in this namespace. Allowed: ' + variables.allowed.join(', ')"
+    - expression: "!has(object.spec.tls) || object.spec.tls.all(t, !has(t.hosts) || t.hosts.all(h, h in variables.allowed))"
+      message: TLS host is not allowed in this namespace.
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: tenant-ingress-hosts
+spec:
+  policyName: tenant-ingress-hosts
+  validationActions: [Deny]
+  matchResources:
+    namespaceSelector:
+      matchLabels:
+        platform/tenant: "true"

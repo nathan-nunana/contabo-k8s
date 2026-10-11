@@ -9,6 +9,11 @@
   vars:
     platform_manifest: namespaces
 
+- name: Admission rules for tenant namespaces
+  ansible.builtin.include_tasks: apply.yml
+  vars:
+    platform_manifest: tenant-policy
+
 - name: Create the local deploy-kubeconfigs directory
   ansible.builtin.file:
     path: "{{ playbook_dir }}/deploy-kubeconfigs"

@@ -17,4 +17,11 @@ metadata:
     platform/tenant: "true"
     postgres-access: "{{ (t.postgres | default(false)) | string | lower }}"
     storage-access: "{{ (t.bucket is defined) | string | lower }}"
+    # Anyone who can create pods here (including CI's deploy account) is held
+    # to the restricted profile: no privileged pods, host mounts or host ports.
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/enforce-version: latest
+  annotations:
+    # Hostnames this tenant's Ingresses may use; see tenant-policy.yaml.j2.
+    platform/allowed-hosts: "{{ t.hosts | default([]) | join(',') }}"
 {% endfor %}

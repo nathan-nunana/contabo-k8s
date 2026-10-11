@@ -1,4 +1,5 @@
-{% if ghcr_token %}
+{# Opt-in: a classic read:packages token can read every package its owner can. #}
+{% if ghcr_token and tenant.registry_pull | default(false) %}
 apiVersion: v1
 kind: Secret
 metadata:

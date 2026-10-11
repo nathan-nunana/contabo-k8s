@@ -19,3 +19,36 @@
   register: verify_can_deploy
   changed_when: false
   failed_when: verify_can_deploy.stdout != 'yes'
+
+- name: "Privileged pods are rejected for {{ tenant.name }}"
+  ansible.builtin.command:
+    argv: [k3s, kubectl, -n, "{{ tenant.name }}", run, psa-check, --dry-run=server, --image=busybox:1.37,
+           '--overrides={"spec":{"containers":[{"name":"psa-check","image":"busybox:1.37","securityContext":{"privileged":true}}]}}']
+  register: verify_psa
+  changed_when: false
+  failed_when: verify_psa.rc == 0 or 'violates PodSecurity' not in verify_psa.stderr
+
+- name: "Deployer cannot expose NodePort Services for {{ tenant.name }}"
+  ansible.builtin.command:
+    argv: [k3s, kubectl, -n, "{{ tenant.name }}", create, service, nodeport, vap-check, --tcp=80:80, --dry-run=server,
+           "--as=system:serviceaccount:{{ tenant.name }}:deployer"]
+  register: verify_nodeport
+  changed_when: false
+  failed_when: verify_nodeport.rc == 0 or 'must be ClusterIP' not in verify_nodeport.stderr
+
+- name: "Deployer cannot claim hosts it does not own for {{ tenant.name }}"
+  ansible.builtin.command:
+    argv: [k3s, kubectl, -n, "{{ tenant.name }}", create, ingress, hijack-check, "--rule={{ item }}/*=x:80",
+           --dry-run=server, "--as=system:serviceaccount:{{ tenant.name }}:deployer"]
+  loop: "{{ [assets_host, grafana_host] + (tenants | rejectattr('name', 'equalto', tenant.name)
+            | map(attribute='hosts', default=[]) | flatten) }}"
+  register: verify_hijack
+  changed_when: false
+  failed_when: verify_hijack.rc == 0 or 'is not allowed in this namespace' not in verify_hijack.stderr
+
+- name: "Deployer can use its own hosts for {{ tenant.name }}"
+  ansible.builtin.command:
+    argv: [k3s, kubectl, -n, "{{ tenant.name }}", create, ingress, own-host-check, "--rule={{ item }}/*=x:80",
+           --dry-run=server, "--as=system:serviceaccount:{{ tenant.name }}:deployer"]
+  loop: "{{ tenant.hosts | default([]) }}"
+  changed_when: false
