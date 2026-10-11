@@ -1,0 +1,41 @@
+- name: Install the CloudNativePG operator
+  kubernetes.core.helm:
+    name: cnpg
+    chart_ref: cloudnative-pg
+    chart_repo_url: https://cloudnative-pg.github.io/charts
+    chart_version: "{{ cnpg_chart_version }}"
+    release_namespace: cnpg-system
+    create_namespace: true
+    wait: true
+
+- name: Backup role password
+  ansible.builtin.include_tasks: password.yml
+  vars:
+    platform_pw_namespace: databases
+    platform_pw_secret: backup-credentials
+    platform_pw_key: password
+
+- name: Backup role secret
+  ansible.builtin.include_tasks: apply.yml
+  vars:
+    platform_manifest: postgres-role-backup
+    platform_template: postgres-role-secret.yaml.j2
+    platform_role_secret: backup-credentials
+    platform_role_name: backup
+    platform_secret: true
+
+- name: Tenant role secrets
+  ansible.builtin.include_tasks: postgres_role.yml
+  loop: "{{ platform_pg_tenants }}"
+  loop_control:
+    loop_var: tenant
+    label: "{{ tenant.name }}"
+
+- name: Postgres cluster, network policy and monitoring
+  ansible.builtin.include_tasks: apply.yml
+  vars:
+    platform_manifest: postgres
+
+- name: Wait for Postgres to be Ready
+  ansible.builtin.command: k3s kubectl -n databases wait cluster/postgres --for=condition=Ready --timeout=10m
+  changed_when: false

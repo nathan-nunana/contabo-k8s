@@ -14,6 +14,9 @@
   vars:
     platform_manifest: tenant-policy
 
+- name: Shared Postgres server
+  ansible.builtin.include_tasks: postgres.yml
+
 - name: Create the local deploy-kubeconfigs directory
   ansible.builtin.file:
     path: "{{ playbook_dir }}/deploy-kubeconfigs"

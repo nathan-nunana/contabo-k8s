@@ -1,0 +1,15 @@
+- name: "Role password for {{ tenant.name }}"
+  ansible.builtin.include_tasks: password.yml
+  vars:
+    platform_pw_namespace: databases
+    platform_pw_secret: "tenant-{{ tenant.name }}"
+    platform_pw_key: password
+
+- name: "Role secret for {{ tenant.name }}"
+  ansible.builtin.include_tasks: apply.yml
+  vars:
+    platform_manifest: "postgres-role-{{ tenant.name }}"
+    platform_template: postgres-role-secret.yaml.j2
+    platform_role_secret: "tenant-{{ tenant.name }}"
+    platform_role_name: "{{ tenant.name | replace('-', '_') }}"
+    platform_secret: true

@@ -67,6 +67,18 @@
   vars:
     platform_pg_tenants: "{{ tenants | selectattr('postgres', 'defined') | selectattr('postgres') | list }}"
   tasks:
+    - name: Postgres cluster is Ready
+      ansible.builtin.command: k3s kubectl -n databases wait cluster/postgres --for=condition=Ready --timeout=60s
+      changed_when: false
+
+    - name: Postgres refuses connections from unlabelled namespaces
+      ansible.builtin.command:
+        argv: [k3s, kubectl, -n, default, run, netpol-check, --rm, -i, --quiet, --restart=Never,
+               "--image={{ postgres_image }}", --command, --, pg_isready, -h, postgres-rw.databases.svc, -t, "5"]
+      register: verify_netpol
+      changed_when: false
+      failed_when: "'no response' not in verify_netpol.stdout"
+
     - name: Check each tenant
       ansible.builtin.include_tasks: tests/verify-tenant.yml
       loop: "{{ tenants }}"

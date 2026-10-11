@@ -1,0 +1,107 @@
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: postgres
+  namespace: databases
+spec:
+  instances: 1
+  imageName: {{ postgres_image }}
+  storage:
+    size: {{ postgres_storage_size }}
+    storageClass: local-path-retain
+  postgresql:
+    parameters:
+      max_connections: "200"
+      shared_buffers: 512MB
+  resources:
+    requests:
+      cpu: 250m
+      memory: 1Gi
+    limits:
+      memory: 2Gi
+  managed:
+    roles:
+      - name: backup
+        ensure: present
+        login: true
+        inRoles: [pg_read_all_data]
+        passwordSecret:
+          name: backup-credentials
+{% for t in platform_pg_tenants %}
+      - name: {{ t.name | replace('-', '_') }}
+        ensure: present
+        login: true
+        connectionLimit: 50
+        passwordSecret:
+          name: tenant-{{ t.name }}
+{% endfor %}
+---
+# Only labelled tenant namespaces reach Postgres; the operator and Prometheus
+# reach their own ports.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: postgres-access
+  namespace: databases
+spec:
+  podSelector: {}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector: {}
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: cnpg-system
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+      ports:
+        - port: 9187
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              postgres-access: "true"
+      ports:
+        - port: 5432
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: postgres
+  namespace: databases
+spec:
+  selector:
+    matchLabels:
+      cnpg.io/cluster: postgres
+  podMetricsEndpoints:
+    - port: metrics
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: postgres
+  namespace: databases
+spec:
+  groups:
+    - name: postgres
+      rules:
+        - alert: PostgresDown
+          expr: absent(cnpg_collector_up{namespace="databases"}) or cnpg_collector_up{namespace="databases"} == 0
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: The shared Postgres server is down.
+            description: Every tenant using the databases namespace is affected. Check `kubectl -n databases get cluster,pods`.
+        - alert: PostgresConnectionsNearLimit
+          expr: |
+            sum by (pod) (cnpg_backends_total{namespace="databases"})
+              / max by (pod) (cnpg_pg_settings_setting{namespace="databases", name="max_connections"}) > 0.8
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: Postgres is using over 80% of max_connections.
+            description: A tenant may be leaking connections. Check `pg_stat_activity` per database.
