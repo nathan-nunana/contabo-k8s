@@ -91,6 +91,32 @@
         fail_msg: "Expected no response, got: {{ verify_pod_logs.stdout }}"
         quiet: true
 
+    - name: MinIO is ready
+      ansible.builtin.command: k3s kubectl -n storage rollout status statefulset/minio --timeout=60s
+      changed_when: false
+
+    # Straight to the VPS with the assets hostname, so this doesn't depend on
+    # DNS. -k because the certificate may not be issued yet.
+    - name: Send GET and PUT to the assets host
+      ansible.builtin.command:
+        argv: [curl, -sk, -o, /dev/stdout, -w, "\nstatus=%{http_code}", -X, "{{ item }}",
+               --resolve, "{{ assets_host }}:443:{{ ansible_host }}",
+               "https://{{ assets_host }}/no-such-bucket/probe.txt"]
+      loop: [GET, PUT]
+      register: verify_assets
+      changed_when: false
+      delegate_to: localhost
+      become: false
+
+    - name: GET reaches MinIO and PUT is refused before it
+      ansible.builtin.assert:
+        that:
+          - "'<Error><Code>' in verify_assets.results[0].stdout"
+          - "'status=404' in verify_assets.results[1].stdout"
+          - "'404 page not found' in verify_assets.results[1].stdout"
+        fail_msg: "GET: {{ verify_assets.results[0].stdout }} / PUT: {{ verify_assets.results[1].stdout }}"
+        quiet: true
+
     - name: Run a database dump now
       ansible.builtin.command: >-
         k3s kubectl -n databases create job --from=cronjob/pg-dump

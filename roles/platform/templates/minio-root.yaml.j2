@@ -1,0 +1,9 @@
+apiVersion: v1
+kind: Secret
+metadata:
+  name: minio-root
+  namespace: storage
+type: Opaque
+stringData:
+  MINIO_ROOT_USER: admin
+  MINIO_ROOT_PASSWORD: {{ platform_password }}

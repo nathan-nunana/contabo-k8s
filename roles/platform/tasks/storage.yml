@@ -1,0 +1,21 @@
+- name: MinIO root password
+  ansible.builtin.include_tasks: password.yml
+  vars:
+    platform_pw_namespace: storage
+    platform_pw_secret: minio-root
+    platform_pw_key: MINIO_ROOT_PASSWORD
+
+- name: MinIO root secret
+  ansible.builtin.include_tasks: apply.yml
+  vars:
+    platform_manifest: minio-root
+    platform_secret: true
+
+- name: MinIO, its public host and monitoring
+  ansible.builtin.include_tasks: apply.yml
+  vars:
+    platform_manifest: minio
+
+- name: Wait for MinIO
+  ansible.builtin.command: k3s kubectl -n storage rollout status statefulset/minio --timeout=5m
+  changed_when: false
