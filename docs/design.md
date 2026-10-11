@@ -21,6 +21,7 @@ storage, monitoring, alerting and backups, from one command, repeatably.
 | Heartbeat   | Watchdog alert → healthchecks.io         | A dead server can't alert about itself |
 | Backups     | etcd snapshots every 6h, 7 days, local   | Undo mistakes; off-server copies are a later step |
 | Hardening   | sudo user, key-only SSH, UFW, fail2ban, unattended-upgrades | Baseline for a public VPS |
+| Platform    | Shared CloudNativePG Postgres and MinIO, Redis per tenant | One server per service for every app; isolation per tenant (see platform.md) |
 
 ## Flow
 

@@ -11,6 +11,8 @@ single-node [k3s](https://k3s.io) cluster with:
 - A healthchecks.io heartbeat that tells you when the whole server goes quiet
 - etcd snapshots every 6 hours, kept for 7 days
 - A sudo admin user, key-only SSH, UFW, fail2ban and unattended upgrades
+- Shared Postgres (CloudNativePG) and MinIO for app namespaces, each with its
+  own Redis and a scoped deploy account. See [docs/platform.md](docs/platform.md)
 
 See [docs/design.md](docs/design.md) for the reasoning behind each choice.
 
