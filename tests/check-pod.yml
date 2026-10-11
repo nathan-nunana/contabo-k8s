@@ -1,0 +1,36 @@
+# Runs a one-off pod and returns its output in verify_pod_logs. Reading logs
+# after the pod finishes avoids `kubectl run --rm -i`, which loses the output
+# when a pod exits before kubectl attaches.
+# Vars: verify_pod_namespace, verify_pod_name, verify_pod_spec (a pod spec dict).
+- name: Remove a leftover check pod {{ verify_pod_name }}
+  ansible.builtin.command:
+    argv: [k3s, kubectl, -n, "{{ verify_pod_namespace }}", delete, pod, "{{ verify_pod_name }}", --ignore-not-found]
+  changed_when: false
+
+- name: Start check pod {{ verify_pod_name }}
+  ansible.builtin.command:
+    argv: [k3s, kubectl, -n, "{{ verify_pod_namespace }}", run, "{{ verify_pod_name }}", --restart=Never,
+           "--image={{ verify_pod_spec.containers[0].image }}",
+           "--overrides={{ {'spec': verify_pod_spec | combine({'restartPolicy': 'Never'})} | to_json }}"]
+  changed_when: false
+
+- name: Wait for check pod to finish {{ verify_pod_name }}
+  ansible.builtin.command:
+    argv: [k3s, kubectl, -n, "{{ verify_pod_namespace }}", get, pod, "{{ verify_pod_name }}",
+           -o, "jsonpath={.status.phase}"]
+  register: verify_pod_phase
+  changed_when: false
+  retries: 60
+  delay: 2
+  until: verify_pod_phase.stdout in ['Succeeded', 'Failed']
+
+- name: Read check pod output {{ verify_pod_name }}
+  ansible.builtin.command:
+    argv: [k3s, kubectl, -n, "{{ verify_pod_namespace }}", logs, "{{ verify_pod_name }}"]
+  register: verify_pod_logs
+  changed_when: false
+
+- name: Delete check pod {{ verify_pod_name }}
+  ansible.builtin.command:
+    argv: [k3s, kubectl, -n, "{{ verify_pod_namespace }}", delete, pod, "{{ verify_pod_name }}", --wait=false]
+  changed_when: false

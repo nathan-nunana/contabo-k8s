@@ -71,13 +71,24 @@
       ansible.builtin.command: k3s kubectl -n databases wait cluster/postgres --for=condition=Ready --timeout=60s
       changed_when: false
 
+    - name: Try Postgres from an unlabelled namespace
+      ansible.builtin.include_tasks: tests/check-pod.yml
+      vars:
+        verify_pod_namespace: default
+        verify_pod_name: netpol-check
+        verify_pod_spec:
+          containers:
+            - name: netpol-check
+              image: "{{ postgres_image }}"
+              # Wait past the first seconds, when new pods have no network yet
+              # anyway, so a pass means the policy blocked it.
+              command: [bash, -c, "sleep 10; pg_isready -h postgres-rw.databases.svc -t 5"]
+
     - name: Postgres refuses connections from unlabelled namespaces
-      ansible.builtin.command:
-        argv: [k3s, kubectl, -n, default, run, netpol-check, --rm, -i, --quiet, --restart=Never,
-               "--image={{ postgres_image }}", --command, --, pg_isready, -h, postgres-rw.databases.svc, -t, "5"]
-      register: verify_netpol
-      changed_when: false
-      failed_when: "'no response' not in verify_netpol.stdout"
+      ansible.builtin.assert:
+        that: "'no response' in verify_pod_logs.stdout"
+        fail_msg: "Expected no response, got: {{ verify_pod_logs.stdout }}"
+        quiet: true
 
     - name: Check each tenant
       ansible.builtin.include_tasks: tests/verify-tenant.yml

@@ -52,3 +52,50 @@
            --dry-run=server, "--as=system:serviceaccount:{{ tenant.name }}:deployer"]
   loop: "{{ tenant.hosts | default([]) }}"
   changed_when: false
+
+- name: "Database access for {{ tenant.name }}"
+  when: tenant.postgres | default(false)
+  block:
+    - name: "Connect to own database and try the others for {{ tenant.name }}"
+      ansible.builtin.include_tasks: check-pod.yml
+      vars:
+        verify_pod_namespace: "{{ tenant.name }}"
+        verify_pod_name: pg-check
+        verify_others: "{{ platform_pg_tenants | map(attribute='name') | reject('equalto', tenant.name)
+                           | map('replace', '-', '_') | join(' ') }}"
+        verify_pod_spec:
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 26
+            seccompProfile: { type: RuntimeDefault }
+          containers:
+            - name: pg-check
+              image: "{{ postgres_image }}"
+              envFrom: [{ secretRef: { name: postgres } }]
+              securityContext:
+                allowPrivilegeEscalation: false
+                capabilities: { drop: [ALL] }
+              command: [/bin/bash, -c]
+              args:
+                - |
+                  # New pods get network access a couple of seconds after start.
+                  for i in $(seq 1 30); do pg_isready -q -h postgres-rw.databases.svc && break; sleep 1; done
+                  echo "own=$(psql "$DATABASE_URL" -tAc 'select current_database()')"
+                  for db in {{ verify_others }}; do
+                    if out=$(psql "${DATABASE_URL%/*}/$db?sslmode=require" -tAc 'select 1' 2>&1); then
+                      echo "cross=$db:allowed"
+                    elif echo "$out" | grep -q 'permission denied for database'; then
+                      echo "cross=$db:denied"
+                    else
+                      echo "cross=$db:error: $out"
+                    fi
+                  done
+
+    - name: "Only its own database is reachable for {{ tenant.name }}"
+      ansible.builtin.assert:
+        that:
+          - ('own=' ~ (tenant.name | replace('-', '_'))) in verify_pod_logs.stdout
+          - "':allowed' not in verify_pod_logs.stdout"
+          - "':error' not in verify_pod_logs.stdout"
+        fail_msg: "{{ verify_pod_logs.stdout }}"
+        quiet: true

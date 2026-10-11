@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: Secret
+metadata:
+  name: postgres
+  namespace: {{ tenant.name }}
+type: Opaque
+stringData:
+  DATABASE_URL: postgres://{{ tenant.name | replace('-', '_') }}:{{ platform_password }}@postgres-rw.databases.svc:5432/{{ tenant.name | replace('-', '_') }}?sslmode=require

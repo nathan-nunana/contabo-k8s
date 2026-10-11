@@ -35,3 +35,20 @@
   delegate_to: localhost
   become: false
   no_log: true
+
+- name: "Database credentials for {{ tenant.name }}"
+  when: tenant.postgres | default(false)
+  block:
+    - name: "Read the role password for {{ tenant.name }}"
+      ansible.builtin.include_tasks: password.yml
+      vars:
+        platform_pw_namespace: databases
+        platform_pw_secret: "tenant-{{ tenant.name }}"
+        platform_pw_key: password
+
+    - name: "DATABASE_URL secret for {{ tenant.name }}"
+      ansible.builtin.include_tasks: apply.yml
+      vars:
+        platform_manifest: "{{ tenant.name }}-postgres"
+        platform_template: tenant-postgres.yaml.j2
+        platform_secret: true
